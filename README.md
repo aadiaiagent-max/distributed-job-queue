@@ -96,9 +96,9 @@ A claim is a **time-bounded exclusive lease**. If the worker dies, the lease exp
 
 `computeDelay(attempt, baseMs, maxMs)` uses **full jitter**:
 
-\\[
-\\text{delay} = \\mathrm{Uniform}(0,\\ \\min(\\mathrm{maxMs},\\ \\mathrm{baseMs} \\cdot 2^{\\mathrm{attempt}}))
-\\]
+```
+delay = Uniform(0, min(maxMs, baseMs * 2^attempt))
+```
 
 Full jitter (popularized by the AWS Architecture Blog) dampens synchronized retry storms better than “decorrelated” or “equal” jitter for many fan-out workers.
 
@@ -144,7 +144,7 @@ examples/basic.ts
 | `listDead()` | Snapshot of DLQ |
 | `get(id)` / `list()` | Introspection |
 
-Statuses: `pending` → `leased` → `succeeded` \\| `failed` → (retry) → `dead`.
+Statuses: `pending` → `leased` → `succeeded` | `failed` → (retry) → `dead`.
 
 ---
 
