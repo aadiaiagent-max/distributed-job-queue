@@ -10,14 +10,14 @@
 
 ## Why this exists
 
-Most "toy queues" stop at `push` / `pop`. Production systems fail in messier ways:
+Most “toy queues” stop at `push` / `pop`. Production systems fail in messier ways:
 
 - Workers crash mid-task → work must be **reclaimed**, not lost or double-applied blindly.
 - Transient errors need **bounded retries** with **jittered backoff**, not tight loops.
 - Poison messages must stop consuming capacity → **dead-letter queue (DLQ)**.
 - Clients retry HTTP → enqueue must be **idempotent**.
 
-This library encodes those invariants in a small, readable TypeScript codebase you can finish in one sitting — the same primitives you'd wire to a durable store (SQL / Redis / SQS) in a real service.
+This library encodes those invariants in a small, readable TypeScript codebase you can finish in one sitting — the same primitives you’d wire to a durable store (SQL / Redis / SQS) in a real service.
 
 **Interview angle:** leases ≈ fencing tokens; DLQ ≈ poison-pill isolation; idempotency keys ≈ exactly-once *enqueue* (at-least-once *execution* still applies).
 
@@ -94,19 +94,25 @@ A claim is a **time-bounded exclusive lease**. If the worker dies, the lease exp
 
 ### Retries + exponential backoff with full jitter
 
-`computeDelay(attempt, baseMs, maxMs)` uses **full jitter**: delay = Uniform(0, min(maxMs, baseMs * 2^attempt)). Full jitter dampens synchronized retry storms for fan-out workers.
+`computeDelay(attempt, baseMs, maxMs)` uses **full jitter**:
+
+\[
+\text{delay} = \mathrm{Uniform}(0,\ \min(\mathrm{maxMs},\ \mathrm{baseMs} \cdot 2^{\mathrm{attempt}}))
+\]
+
+Full jitter (popularized by the AWS Architecture Blog) dampens synchronized retry storms better than “decorrelated” or “equal” jitter for many fan-out workers.
 
 ### Dead-letter queue
 
-When `attempts >= maxAttempts`, the job is marked `dead` and excluded from `claim`. Operators inspect via `listDead()`.
+When `attempts >= maxAttempts`, the job is marked `dead` and excluded from `claim`. Operators inspect via `listDead()`. In a production port this is where you’d page, park in a DLQ topic, or require manual replay.
 
 ### Idempotency keys
 
-`enqueue(..., { idempotencyKey })` is a **lookup-or-insert**. Safe for client retries; does **not** make handler execution exactly-once.
+`enqueue(..., { idempotencyKey })` is a **lookup-or-insert**. Safe for client retries; does **not** make handler execution exactly-once — handlers must still be idempotent (classic at-least-once delivery).
 
 ### In-memory store on purpose
 
-`InMemoryJobStore` keeps the demo dependency-free and unit-testable with an injectable clock/RNG.
+`InMemoryJobStore` keeps the demo dependency-free and unit-testable with an injectable clock/RNG. The queue API is store-shaped so swapping in Postgres/Redis is an exercise, not a rewrite.
 
 ---
 
@@ -119,10 +125,26 @@ src/
   store/InMemoryJobStore.ts
   queue/JobQueue.ts        # enqueue, claim, complete, fail, heartbeat, listDead
   index.ts                 # public exports
-tests/
+tests/                     # vitest — enqueue/claim/complete, retry→DLQ, idempotency, lease reclaim
 examples/basic.ts
-.github/workflows/ci.yml
+.github/workflows/ci.yml   # Node 20: install → typecheck → test
 ```
+
+---
+
+## API surface
+
+| Method | Behavior |
+|--------|----------|
+| `enqueue(name, payload, opts?)` | Create job; honor `idempotencyKey`, `delayMs`, backoff knobs |
+| `claim(workerId, leaseMs)` | Lease next eligible job (`pending`/`failed` past `availableAt`, or expired lease) |
+| `complete(id)` | Terminal success |
+| `fail(id, err)` | Increment attempts → retry after backoff or `dead` |
+| `heartbeat(id, leaseMs)` | Extend lease |
+| `listDead()` | Snapshot of DLQ |
+| `get(id)` / `list()` | Introspection |
+
+Statuses: `pending` → `leased` → `succeeded` \| `failed` → (retry) → `dead`.
 
 ---
 
