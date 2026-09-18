@@ -1,6 +1,6 @@
 # @aadiaiagent/distributed-job-queue
 
-**Durable-style in-process job queue** — leases, retries with exponential backoff + jitter, dead-letter queue, and idempotency keys. Zero runtime dependencies. Built as a Staff SWE portfolio piece that demonstrates distributed-systems thinking without requiring Redis, Postgres, or a cloud account.
+**Durable-style in-process job queue** — leases, retries with exponential backoff + jitter, dead-letter queue, and idempotency keys. Zero runtime dependencies. Demonstrates distributed-systems thinking without requiring Redis, Postgres, or a cloud account. Small surface area — readable in one sitting.
 
 [![CI](https://github.com/aadiaiagent-max/distributed-job-queue/actions/workflows/ci.yml/badge.svg)](https://github.com/aadiaiagent-max/distributed-job-queue/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
@@ -19,7 +19,7 @@ Most “toy queues” stop at `push` / `pop`. Production systems fail in messier
 
 This library encodes those invariants in a small, readable TypeScript codebase you can finish in one sitting — the same primitives you’d wire to a durable store (SQL / Redis / SQS) in a real service.
 
-**Interview angle:** leases ≈ fencing tokens; DLQ ≈ poison-pill isolation; idempotency keys ≈ exactly-once *enqueue* (at-least-once *execution* still applies).
+**Systems notes:** leases ≈ fencing tokens; DLQ ≈ poison-pill isolation; idempotency keys ≈ exactly-once *enqueue* (at-least-once *execution* still applies).
 
 ---
 
@@ -96,9 +96,9 @@ A claim is a **time-bounded exclusive lease**. If the worker dies, the lease exp
 
 `computeDelay(attempt, baseMs, maxMs)` uses **full jitter**:
 
-\[
-\text{delay} = \mathrm{Uniform}(0,\ \min(\mathrm{maxMs},\ \mathrm{baseMs} \cdot 2^{\mathrm{attempt}}))
-\]
+\\[
+\\text{delay} = \\mathrm{Uniform}(0,\\ \\min(\\mathrm{maxMs},\\ \\mathrm{baseMs} \\cdot 2^{\\mathrm{attempt}}))
+\\]
 
 Full jitter (popularized by the AWS Architecture Blog) dampens synchronized retry storms better than “decorrelated” or “equal” jitter for many fan-out workers.
 
@@ -144,7 +144,7 @@ examples/basic.ts
 | `listDead()` | Snapshot of DLQ |
 | `get(id)` / `list()` | Introspection |
 
-Statuses: `pending` → `leased` → `succeeded` \| `failed` → (retry) → `dead`.
+Statuses: `pending` → `leased` → `succeeded` \\| `failed` → (retry) → `dead`.
 
 ---
 
